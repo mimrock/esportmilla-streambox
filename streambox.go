@@ -10,27 +10,32 @@ import (
 	"sync"
 )
 
-type streamboxHandler struct {
-	streams *[]twitch.StreamS
-	mutex *sync.RWMutex
+
+type StreamList struct {
+	sync.RWMutex
+	streams []twitch.StreamS
 }
 
-func newStreamboxHandler(streams *[]twitch.StreamS, mutex *sync.RWMutex) *streamboxHandler {
+type streamboxHandler struct {
+	streamList *StreamList
+}
+
+func newStreamboxHandler(streamList *StreamList) *streamboxHandler {
 	log.Println("newStreamboxHandler")
-	return &streamboxHandler{streams: streams, mutex: mutex}
+	return &streamboxHandler{streamList: streamList}
 }
 
 func (sb *streamboxHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log.Println("ServeHTTP")
 	w.Write([]byte("<html><body><ol>"))
-	sb.mutex.RLock()
-	for _, s := range *sb.streams {
+	sb.streamList.RLock()
+	for _, s := range sb.streamList.streams {
 		//fmt.Printf("%d - %s (%s) Status: %s Viewers: %d Url: %s Views: %d Name %s\n", i+1, s.Name, s.Game, s.Channel.Status, s.Viewers, s.Channel.Url, s.Channel.Views, s.Channel.Name)
 		w.Write([]byte("<li>"))
 		w.Write([]byte("Status: " + s.Channel.Status + " Game: " +s.Game + " (" + strconv.Itoa(s.Viewers) + ")"))
 		w.Write([]byte("</li>"))
 	}
-	sb.mutex.RUnlock()
+	sb.streamList.RUnlock()
  	w.Write([]byte("</ol></body></html>"))
 }
 
@@ -51,29 +56,29 @@ func getStreams() []twitch.StreamS {
 	return streams.Streams
 }
 
-func Scheduler(streams *[]twitch.StreamS, mutex *sync.RWMutex) {
+func Scheduler(streamList *StreamList) {
 	refreshStreams := time.Tick(5000 * time.Millisecond)
 	for {
 		select {
 		case <-refreshStreams:
 			st := getStreams()
-			mutex.Lock()
-			*streams = st
-			mutex.Unlock()
+			streamList.Lock()
+			streamList.streams = st
+			streamList.Unlock()
 		}
 	}
 }
 
 func main() {
 	log.Println("Starting up server...")
-	mutex := &sync.RWMutex{}
-	streams := getStreams()
+	streamList := new(StreamList)
+	streamList.streams = getStreams()
 
-	go Scheduler(&streams, mutex)
+	go Scheduler(streamList)
 
 	mux := http.NewServeMux()
 
-	mux.Handle("/streambox", newStreamboxHandler(&streams, mutex))
+	mux.Handle("/streambox", newStreamboxHandler(streamList))
 
 	log.Println("Listening...")
 	http.ListenAndServe(":8080", mux)
