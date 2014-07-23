@@ -8,34 +8,41 @@ import (
 	"time"
 	"strconv"
 	"sync"
+	"code.google.com/p/gcfg"
 )
 
 
 type StreamList struct {
 	sync.RWMutex
-	streams []twitch.StreamS
+	Streams []twitch.StreamS
+}
+
+type Config struct {
+	Global struct {
+		Refresh int
+	}
 }
 
 type streamboxHandler struct {
-	streamList *StreamList
+	StreamList *StreamList
 }
 
 func newStreamboxHandler(streamList *StreamList) *streamboxHandler {
 	log.Println("newStreamboxHandler")
-	return &streamboxHandler{streamList: streamList}
+	return &streamboxHandler{StreamList: streamList}
 }
 
 func (sb *streamboxHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log.Println("ServeHTTP")
 	w.Write([]byte("<html><body><ol>"))
-	sb.streamList.RLock()
-	for _, s := range sb.streamList.streams {
+	sb.StreamList.RLock()
+	for _, s := range sb.StreamList.Streams {
 		//fmt.Printf("%d - %s (%s) Status: %s Viewers: %d Url: %s Views: %d Name %s\n", i+1, s.Name, s.Game, s.Channel.Status, s.Viewers, s.Channel.Url, s.Channel.Views, s.Channel.Name)
 		w.Write([]byte("<li>"))
 		w.Write([]byte("Status: " + s.Channel.Status + " Game: " +s.Game + " (" + strconv.Itoa(s.Viewers) + ")"))
 		w.Write([]byte("</li>"))
 	}
-	sb.streamList.RUnlock()
+	sb.StreamList.RUnlock()
  	w.Write([]byte("</ol></body></html>"))
 }
 
@@ -56,25 +63,36 @@ func getStreams() []twitch.StreamS {
 	return streams.Streams
 }
 
-func Scheduler(streamList *StreamList) {
-	refreshStreams := time.Tick(5000 * time.Millisecond)
+func Scheduler(streamList *StreamList, cfg *Config) {
+	log.Println("refresh time is", cfg.Global.Refresh, "seconds")
+	refreshStreams := time.Tick(time.Second * time.Duration(cfg.Global.Refresh))
 	for {
 		select {
 		case <-refreshStreams:
 			st := getStreams()
 			streamList.Lock()
-			streamList.streams = st
+			streamList.Streams = st
 			streamList.Unlock()
 		}
 	}
 }
 
+func Init() (*StreamList, *Config) {
+	var cfg Config
+	err := gcfg.ReadFileInto(&cfg, "streambox.gcfg")
+	if err != nil {
+		log.Fatal(err)
+	}
+	streamList := new(StreamList)
+	streamList.Streams = getStreams()
+	return streamList, &cfg
+}
+
 func main() {
 	log.Println("Starting up server...")
-	streamList := new(StreamList)
-	streamList.streams = getStreams()
+	streamList, cfg := Init()
 
-	go Scheduler(streamList)
+	go Scheduler(streamList, cfg)
 
 	mux := http.NewServeMux()
 
