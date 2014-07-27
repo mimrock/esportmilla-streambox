@@ -1,3 +1,12 @@
 ; Comment line
-[global]
-refresh = 30
+[server]
+
+Port = 8080
+
+TwitchRefresh = 30
+
+[logging]
+
+ErrorLog = streambox-error.log
+EventLog = streambox-event.log
+AccessLog = streambox-access.log

@@ -1,7 +1,7 @@
 package main
 
 import (
-	//"fmt"
+	"fmt"
 	"github.com/mrshankly/go-twitch/twitch"
 	"log"
 	"net/http"
@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"sync"
 	"code.google.com/p/gcfg"
+	"bufio"
+	"os"
 )
 
 
@@ -18,9 +20,27 @@ type StreamList struct {
 }
 
 type Config struct {
-	Global struct {
-		Refresh int
+	Server struct {
+		Port int
+		TwitchRefresh int
 	}
+	Logging struct {
+		ErrorLog string
+		EventLog string
+		AccessLog string
+	}
+}
+
+type LogChans struct {
+	Error chan string
+	Event chan string
+	Access chan string
+}
+
+var Loggers  = &LogChans {
+	make(chan string),
+	make(chan string),
+	make(chan string),
 }
 
 type streamboxHandler struct {
@@ -33,21 +53,71 @@ func newStreamboxHandler(streamList *StreamList) *streamboxHandler {
 }
 
 func (sb *streamboxHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	log.Println("ServeHTTP")
+	accessMsg := fmt.Sprintf("%v %v from %v Headers: %+v", r.Method, r.RequestURI, r.RemoteAddr, r.Header)
+	LogAccess(accessMsg)
 	w.Write([]byte("<html><body><ol>"))
 	sb.StreamList.RLock()
 	for _, s := range sb.StreamList.Streams {
 		//fmt.Printf("%d - %s (%s) Status: %s Viewers: %d Url: %s Views: %d Name %s\n", i+1, s.Name, s.Game, s.Channel.Status, s.Viewers, s.Channel.Url, s.Channel.Views, s.Channel.Name)
-		w.Write([]byte("<li>"))
-		w.Write([]byte("Status: " + s.Channel.Status + " Game: " +s.Game + " (" + strconv.Itoa(s.Viewers) + ")"))
-		w.Write([]byte("</li>"))
+		w.Write([]byte("<li>Status: " + s.Channel.Status + " Game: " +s.Game + " (" + strconv.Itoa(s.Viewers) + ")</li>"))
 	}
 	sb.StreamList.RUnlock()
  	w.Write([]byte("</ol></body></html>"))
 }
 
+func LogError(msg string) {
+	Loggers.Error <- msg
+}
+
+func LogEvent(msg string) {
+	Loggers.Event <- msg
+}
+
+func LogAccess(msg string) {
+	Loggers.Access <- msg
+}
+
+func flushWriterWorker(writer *bufio.Writer, flushInterval int) {
+	flushLog := time.Tick(time.Second * time.Duration(flushInterval))
+	for {
+		select {
+		case <-flushLog:
+			writer.Flush()
+		}
+	}
+}
+
+func logWorker(logFile string, flushInterval int, input chan string) {
+    logWriter, err := os.Create(logFile)
+    if err != nil { panic(err) }
+
+    defer func() {
+        if err = logWriter.Close(); err != nil {
+            panic(err)
+        }
+    }()
+
+    bufLogWriter := bufio.NewWriter(logWriter)
+    logger := log.New(bufLogWriter, "logger: ", log.Ltime & log.Lshortfile)
+
+    for {
+    	select {
+    	case msg := <-input:
+    		logger.Println(msg)
+    		//accessWriter.WriteString(msg)
+    		if (flushInterval == 0) {
+    			bufLogWriter.Flush()
+    		}
+    	}
+    }
+
+    if (flushInterval > 0) {
+    	go flushWriterWorker(bufLogWriter, flushInterval)
+	}
+}
+
 func getStreams() []twitch.StreamS {
-	log.Println("Getting streams...")
+	LogEvent("Getting streams from Twitch.")
 	client := twitch.NewClient(&http.Client{})
 	opt := &twitch.ListOptions{
 		Limit:   100,
@@ -64,8 +134,8 @@ func getStreams() []twitch.StreamS {
 }
 
 func Scheduler(streamList *StreamList, cfg *Config) {
-	log.Println("refresh time is", cfg.Global.Refresh, "seconds")
-	refreshStreams := time.Tick(time.Second * time.Duration(cfg.Global.Refresh))
+	log.Println("refresh time is", cfg.Server.TwitchRefresh, "seconds")
+	refreshStreams := time.Tick(time.Second * time.Duration(cfg.Server.TwitchRefresh))
 	for {
 		select {
 		case <-refreshStreams:
@@ -83,6 +153,14 @@ func Init() (*StreamList, *Config) {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	go logWorker(cfg.Logging.ErrorLog, 0, Loggers.Error)
+	go logWorker(cfg.Logging.EventLog, 0, Loggers.Event)
+	go logWorker(cfg.Logging.AccessLog, 30, Loggers.Access)
+
+	LogEvent("Starting up server.")
+
+
 	streamList := new(StreamList)
 	streamList.Streams = getStreams()
 	return streamList, &cfg
@@ -94,10 +172,14 @@ func main() {
 
 	go Scheduler(streamList, cfg)
 
+	defer func() {
+        LogEvent("Shutdown.")
+    }()
+
 	mux := http.NewServeMux()
 
 	mux.Handle("/streambox", newStreamboxHandler(streamList))
 
 	log.Println("Listening...")
-	http.ListenAndServe(":8080", mux)
+	http.ListenAndServe(":" + strconv.Itoa(cfg.Server.Port), mux)
 }
