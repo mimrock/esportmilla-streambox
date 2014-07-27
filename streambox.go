@@ -87,6 +87,8 @@ func flushWriterWorker(writer *bufio.Writer, flushInterval int) {
 	}
 }
 
+// @todo Graceful stopping by closing threads (last parts of logs are not even written to the disk)
+// @todo Add timestamps on log entries
 func logWorker(logFile string, flushInterval int, input chan string) {
     logWriter, err := os.Create(logFile)
     if err != nil { panic(err) }
@@ -97,14 +99,13 @@ func logWorker(logFile string, flushInterval int, input chan string) {
         }
     }()
 
-    bufLogWriter := bufio.NewWriter(logWriter)
+    bufLogWriter := bufio.NewWriterSize(logWriter, 65535)
     logger := log.New(bufLogWriter, "logger: ", log.Ltime & log.Lshortfile)
 
     for {
     	select {
     	case msg := <-input:
     		logger.Println(msg)
-    		//accessWriter.WriteString(msg)
     		if (flushInterval == 0) {
     			bufLogWriter.Flush()
     		}
