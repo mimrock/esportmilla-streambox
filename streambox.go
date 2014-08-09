@@ -11,6 +11,8 @@ import (
 	"code.google.com/p/gcfg"
 	"bufio"
 	"os"
+	"os/signal"
+	"syscall"
 )
 
 
@@ -87,33 +89,31 @@ func flushWriterWorker(writer *bufio.Writer, flushInterval int) {
 	}
 }
 
-// @todo Graceful stopping by closing threads (last parts of logs are not even written to the disk)
+// @todo Better graceful stopping without using time.Sleep()
 // @todo Add timestamps on log entries
 func logWorker(logFile string, flushInterval int, input chan string) {
-    logWriter, err := os.Create(logFile)
+    logWriter, err := os.OpenFile(logFile, os.O_RDWR|os.O_APPEND, 0660)
     if err != nil { panic(err) }
 
     defer func() {
         if err = logWriter.Close(); err != nil {
             panic(err)
         }
+        log.Println("Closed", logFile)
     }()
 
     bufLogWriter := bufio.NewWriterSize(logWriter, 65535)
-    logger := log.New(bufLogWriter, "logger: ", log.Ltime & log.Lshortfile)
-
-    for {
-    	select {
-    	case msg := <-input:
-    		logger.Println(msg)
-    		if (flushInterval == 0) {
-    			bufLogWriter.Flush()
-    		}
-    	}
-    }
+    logger := log.New(bufLogWriter, "", log.Ldate|log.Ltime)
 
     if (flushInterval > 0) {
     	go flushWriterWorker(bufLogWriter, flushInterval)
+	}
+
+	for msg := range input {
+		logger.Println(msg)
+		if (flushInterval == 0) {
+			bufLogWriter.Flush()
+		}
 	}
 }
 
@@ -128,7 +128,6 @@ func getStreams() []twitch.StreamS {
 
 	streams, err := client.Streams.List(opt)
 	if err != nil {
-		//log.Fatal(err)
 		log.Println(err)
 	}
 	return streams.Streams
@@ -173,9 +172,17 @@ func main() {
 
 	go Scheduler(streamList, cfg)
 
-	defer func() {
-        LogEvent("Shutdown.")
-    }()
+	go func() {
+		ch := make(chan os.Signal)
+		signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
+		log.Println(<-ch)
+		close(Loggers.Event)
+		close(Loggers.Access)
+		close(Loggers.Error)
+		time.Sleep(500)
+		log.Println("Shutdown 2")
+		os.Exit(0)
+	}()
 
 	mux := http.NewServeMux()
 
