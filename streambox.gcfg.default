@@ -10,3 +10,8 @@ TwitchRefresh = 30
 ErrorLog = streambox-error.log
 EventLog = streambox-event.log
 AccessLog = streambox-access.log
+
+[DataSources]
+; Full form for any SQL Data sources: username:password@protocol(address)/dbname?param=value
+
+MainDatabase = user:password@/dbname

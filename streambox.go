@@ -1,20 +1,22 @@
 package main
 
 import (
+	"bufio"
+	"code.google.com/p/gcfg"
+	"database/sql"
 	"fmt"
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/mrshankly/go-twitch/twitch"
 	"log"
 	"net/http"
-	"time"
-	"strconv"
-	"sync"
-	"code.google.com/p/gcfg"
-	"bufio"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
+	"sync"
 	"syscall"
+	"time"
 )
-
 
 type StreamList struct {
 	sync.RWMutex
@@ -23,23 +25,26 @@ type StreamList struct {
 
 type Config struct {
 	Server struct {
-		Port int
+		Port          int
 		TwitchRefresh int
 	}
 	Logging struct {
-		ErrorLog string
-		EventLog string
+		ErrorLog  string
+		EventLog  string
 		AccessLog string
+	}
+	DataSources struct {
+		MainDatabase string
 	}
 }
 
 type LogChans struct {
-	Error chan string
-	Event chan string
+	Error  chan string
+	Event  chan string
 	Access chan string
 }
 
-var Loggers  = &LogChans {
+var Loggers = &LogChans{
 	make(chan string),
 	make(chan string),
 	make(chan string),
@@ -61,10 +66,10 @@ func (sb *streamboxHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	sb.StreamList.RLock()
 	for _, s := range sb.StreamList.Streams {
 		//fmt.Printf("%d - %s (%s) Status: %s Viewers: %d Url: %s Views: %d Name %s\n", i+1, s.Name, s.Game, s.Channel.Status, s.Viewers, s.Channel.Url, s.Channel.Views, s.Channel.Name)
-		w.Write([]byte("<li>Status: " + s.Channel.Status + " Game: " +s.Game + " (" + strconv.Itoa(s.Viewers) + ")</li>"))
+		w.Write([]byte("<li>Status: " + s.Channel.Status + " Game: " + s.Game + " (" + strconv.Itoa(s.Viewers) + ")</li>"))
 	}
 	sb.StreamList.RUnlock()
- 	w.Write([]byte("</ol></body></html>"))
+	w.Write([]byte("</ol></body></html>"))
 }
 
 func LogError(msg string) {
@@ -90,40 +95,66 @@ func flushWriterWorker(writer *bufio.Writer, flushInterval int) {
 }
 
 // @todo Better graceful stopping without using time.Sleep()
-// @todo Add timestamps on log entries
 func logWorker(logFile string, flushInterval int, input chan string) {
-    logWriter, err := os.OpenFile(logFile, os.O_RDWR|os.O_APPEND, 0660)
-    if err != nil { panic(err) }
+	logWriter, err := os.OpenFile(logFile, os.O_RDWR|os.O_APPEND, 0660)
+	if err != nil {
+		panic(err)
+	}
 
-    defer func() {
-        if err = logWriter.Close(); err != nil {
-            panic(err)
-        }
-        log.Println("Closed", logFile)
-    }()
+	defer func() {
+		if err = logWriter.Close(); err != nil {
+			panic(err)
+		}
+		log.Println("Closed", logFile)
+	}()
 
-    bufLogWriter := bufio.NewWriterSize(logWriter, 65535)
-    logger := log.New(bufLogWriter, "", log.Ldate|log.Ltime)
+	bufLogWriter := bufio.NewWriterSize(logWriter, 65535)
+	logger := log.New(bufLogWriter, "", log.Ldate|log.Ltime)
 
-    if (flushInterval > 0) {
-    	go flushWriterWorker(bufLogWriter, flushInterval)
+	if flushInterval > 0 {
+		go flushWriterWorker(bufLogWriter, flushInterval)
 	}
 
 	for msg := range input {
 		logger.Println(msg)
-		if (flushInterval == 0) {
+		if flushInterval == 0 {
 			bufLogWriter.Flush()
 		}
 	}
 }
 
-func getStreams() []twitch.StreamS {
+func getChannelFilterStrings(activeChannelIds []string, limit int) []string {
+	var start, end int
+	var filterStrings []string
+	for i := 0; i <= ((len(activeChannelIds) - 1) / limit); i++ {
+		start = i * limit
+
+		if (i+1)*limit < len(activeChannelIds) {
+			end = (i + 1) * limit
+		} else {
+			end = len(activeChannelIds)
+		}
+		filterStringsSlice := activeChannelIds[start:end]
+		filterStrings = append(filterStrings, strings.Join(filterStringsSlice, ","))
+	}
+	return filterStrings
+}
+
+//@todo parallel download of all streams.
+func getStreams(activeChannelIds []string) []twitch.StreamS {
+	channelFilterStrings := getChannelFilterStrings(activeChannelIds, 100)
+
+	if len(channelFilterStrings) < 1 {
+		var emptyStreamList []twitch.StreamS
+		return emptyStreamList
+	}
+
 	LogEvent("Getting streams from Twitch.")
 	client := twitch.NewClient(&http.Client{})
 	opt := &twitch.ListOptions{
-		Limit:   100,
+		Limit:   len(activeChannelIds[0]),
 		Offset:  0,
-		//Channel: "tsm_theoddone,trumpsc,hotshotgg,athenelive",
+		Channel: channelFilterStrings[0],
 	}
 
 	streams, err := client.Streams.List(opt)
@@ -139,12 +170,37 @@ func Scheduler(streamList *StreamList, cfg *Config) {
 	for {
 		select {
 		case <-refreshStreams:
-			st := getStreams()
+			st := getStreams(getActiveChannels(cfg.DataSources.MainDatabase))
 			streamList.Lock()
 			streamList.Streams = st
 			streamList.Unlock()
 		}
 	}
+}
+
+func getActiveChannels(dataSourceName string) []string {
+	db, err := sql.Open("mysql", dataSourceName)
+	if err != nil {
+		panic(err)
+	}
+	rows, err := db.Query("SELECT channel_id FROM streambox_channels WHERE enabled = 1")
+	if err != nil {
+		log.Fatal(err)
+	}
+	var enabledChannels []string
+	defer rows.Close()
+	for rows.Next() {
+		var channel_id string
+		if err := rows.Scan(&channel_id); err != nil {
+			panic(err)
+		}
+		enabledChannels = append(enabledChannels, channel_id)
+	}
+	if err := rows.Err(); err != nil {
+		panic(err)
+	}
+
+	return enabledChannels
 }
 
 func Init() (*StreamList, *Config) {
@@ -160,9 +216,8 @@ func Init() (*StreamList, *Config) {
 
 	LogEvent("Starting up server.")
 
-
 	streamList := new(StreamList)
-	streamList.Streams = getStreams()
+	streamList.Streams = getStreams(getActiveChannels(cfg.DataSources.MainDatabase))
 	return streamList, &cfg
 }
 
@@ -180,7 +235,7 @@ func main() {
 		close(Loggers.Access)
 		close(Loggers.Error)
 		time.Sleep(500)
-		log.Println("Shutdown 2")
+		log.Println("Normal Shutdown")
 		os.Exit(0)
 	}()
 
@@ -189,5 +244,5 @@ func main() {
 	mux.Handle("/streambox", newStreamboxHandler(streamList))
 
 	log.Println("Listening...")
-	http.ListenAndServe(":" + strconv.Itoa(cfg.Server.Port), mux)
+	http.ListenAndServe(":"+strconv.Itoa(cfg.Server.Port), mux)
 }
