@@ -123,9 +123,9 @@ func logWorker(logFile string, flushInterval int, input chan string) {
 	}
 }
 
-func getChannelFilterStrings(activeChannelIds []string, limit int) []string {
+func getChannelLists(activeChannelIds []string, limit int) []string {
 	var start, end int
-	var filterStrings []string
+	var channelLists []string
 	for i := 0; i <= ((len(activeChannelIds) - 1) / limit); i++ {
 		start = i * limit
 
@@ -135,33 +135,55 @@ func getChannelFilterStrings(activeChannelIds []string, limit int) []string {
 			end = len(activeChannelIds)
 		}
 		filterStringsSlice := activeChannelIds[start:end]
-		filterStrings = append(filterStrings, strings.Join(filterStringsSlice, ","))
+		channelLists = append(channelLists, strings.Join(filterStringsSlice, ","))
 	}
-	return filterStrings
+	return channelLists
 }
 
-//@todo parallel download of all streams.
-func getStreams(activeChannelIds []string) []twitch.StreamS {
-	channelFilterStrings := getChannelFilterStrings(activeChannelIds, 100)
-
-	if len(channelFilterStrings) < 1 {
-		var emptyStreamList []twitch.StreamS
-		return emptyStreamList
-	}
-
-	LogEvent("Getting streams from Twitch.")
+// @todo retry for a fixed amount of times if the download fails.
+func downloadStreams(output chan []twitch.StreamS, done chan bool, channelList string) {
+	defer func() { done <- true }()
 	client := twitch.NewClient(&http.Client{})
 	opt := &twitch.ListOptions{
-		Limit:   len(activeChannelIds[0]),
+		Limit:   100,
 		Offset:  0,
-		Channel: channelFilterStrings[0],
+		Channel: channelList,
 	}
 
 	streams, err := client.Streams.List(opt)
 	if err != nil {
 		log.Println(err)
 	}
-	return streams.Streams
+	output <- streams.Streams
+}
+
+func getStreams(activeChannelIds []string) []twitch.StreamS {
+	channelLists := getChannelLists(activeChannelIds, 100)
+
+	LogEvent("Getting streams from Twitch.")
+
+	if len(channelLists) < 1 {
+		var emptyStreamList []twitch.StreamS
+		return emptyStreamList
+	}
+
+	output := make(chan []twitch.StreamS)
+	done := make(chan bool)
+	for _, channelList := range channelLists {
+		go downloadStreams(output, done, channelList)
+	}
+
+	var activeStreams, downloadedStreams []twitch.StreamS
+	for i := 0; i < len(channelLists); {
+		select {
+		case downloadedStreams = <-output:
+			activeStreams = append(activeStreams, downloadedStreams...)
+		case <-done:
+			i++
+		}
+	}
+
+	return activeStreams
 }
 
 func Scheduler(streamList *StreamList, cfg *Config) {
