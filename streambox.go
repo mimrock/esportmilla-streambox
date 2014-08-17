@@ -38,6 +38,8 @@ type Config struct {
 	}
 }
 
+var cfg = &Config{}
+
 type LogChans struct {
 	Error  chan string
 	Event  chan string
@@ -186,7 +188,7 @@ func getStreams(activeChannelIds []string) []twitch.StreamS {
 	return activeStreams
 }
 
-func Scheduler(streamList *StreamList, cfg *Config) {
+func Scheduler(streamList *StreamList) {
 	log.Println("refresh time is", cfg.Server.TwitchRefresh, "seconds")
 	refreshStreams := time.Tick(time.Second * time.Duration(cfg.Server.TwitchRefresh))
 	for {
@@ -225,9 +227,8 @@ func getActiveChannels(dataSourceName string) []string {
 	return enabledChannels
 }
 
-func Init() (*StreamList, *Config) {
-	var cfg Config
-	err := gcfg.ReadFileInto(&cfg, "streambox.gcfg")
+func Init() *StreamList {
+	err := gcfg.ReadFileInto(cfg, "streambox.gcfg")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -240,14 +241,14 @@ func Init() (*StreamList, *Config) {
 
 	streamList := new(StreamList)
 	streamList.Streams = getStreams(getActiveChannels(cfg.DataSources.MainDatabase))
-	return streamList, &cfg
+	return streamList
 }
 
 func main() {
 	log.Println("Starting up server...")
-	streamList, cfg := Init()
+	streamList := Init()
 
-	go Scheduler(streamList, cfg)
+	go Scheduler(streamList)
 
 	go func() {
 		ch := make(chan os.Signal)
