@@ -27,6 +27,7 @@ type Config struct {
 	Server struct {
 		Port          int
 		TwitchRefresh int
+		TwitchRetry   int
 	}
 	Logging struct {
 		ErrorLog  string
@@ -145,16 +146,30 @@ func getChannelLists(activeChannelIds []string, limit int) []string {
 // @todo retry for a fixed amount of times if the download fails.
 func downloadStreams(output chan []twitch.StreamS, done chan bool, channelList string) {
 	defer func() { done <- true }()
-	client := twitch.NewClient(&http.Client{})
-	opt := &twitch.ListOptions{
-		Limit:   100,
-		Offset:  0,
-		Channel: channelList,
-	}
 
-	streams, err := client.Streams.List(opt)
-	if err != nil {
-		log.Println(err)
+	var err error
+	var streams *twitch.StreamsS
+
+	do := true
+
+	for i := 0; do == true; i++ {
+		do = false
+		client := twitch.NewClient(&http.Client{})
+		opt := &twitch.ListOptions{
+			Limit:   100,
+			Offset:  0,
+			Channel: channelList,
+		}
+
+		streams, err = client.Streams.List(opt)
+		if err != nil {
+			LogError(err.Error())
+			if i < cfg.Server.TwitchRetry {
+				do = true
+			} else {
+				LogError("Failed getting some data from Twitch. Internal streamlist can be incomplete.")
+			}
+		}
 	}
 	output <- streams.Streams
 }

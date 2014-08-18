@@ -5,6 +5,8 @@ Port = 8080
 
 TwitchRefresh = 30
 
+TwitchRetry = 4
+
 [logging]
 
 ErrorLog = streambox-error.log
