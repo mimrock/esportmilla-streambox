@@ -97,8 +97,7 @@ func flushWriterWorker(writer *bufio.Writer, flushInterval int) {
 	}
 }
 
-// @todo Better graceful stopping without using time.Sleep()
-func logWorker(logFile string, flushInterval int, input chan string) {
+func logWorker(logFile string, flushInterval int, input chan string, safeQuit *sync.WaitGroup) {
 	logWriter, err := os.OpenFile(logFile, os.O_RDWR|os.O_APPEND, 0660)
 	if err != nil {
 		panic(err)
@@ -109,6 +108,7 @@ func logWorker(logFile string, flushInterval int, input chan string) {
 			panic(err)
 		}
 		log.Println("Closed", logFile)
+		safeQuit.Done()
 	}()
 
 	bufLogWriter := bufio.NewWriterSize(logWriter, 65535)
@@ -242,15 +242,15 @@ func getActiveChannels(dataSourceName string) []string {
 	return enabledChannels
 }
 
-func Init() *StreamList {
+func Init(safeQuit *sync.WaitGroup) *StreamList {
 	err := gcfg.ReadFileInto(cfg, "streambox.gcfg")
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	go logWorker(cfg.Logging.ErrorLog, 0, Loggers.Error)
-	go logWorker(cfg.Logging.EventLog, 0, Loggers.Event)
-	go logWorker(cfg.Logging.AccessLog, 30, Loggers.Access)
+	safeQuit.Add(3)
+	go logWorker(cfg.Logging.ErrorLog, 0, Loggers.Error, safeQuit)
+	go logWorker(cfg.Logging.EventLog, 0, Loggers.Event, safeQuit)
+	go logWorker(cfg.Logging.AccessLog, 30, Loggers.Access, safeQuit)
 
 	LogEvent("Starting up server.")
 
@@ -261,7 +261,8 @@ func Init() *StreamList {
 
 func main() {
 	log.Println("Starting up server...")
-	streamList := Init()
+	var safeQuit sync.WaitGroup
+	streamList := Init(&safeQuit)
 
 	go Scheduler(streamList)
 
@@ -272,7 +273,7 @@ func main() {
 		close(Loggers.Event)
 		close(Loggers.Access)
 		close(Loggers.Error)
-		time.Sleep(500)
+		safeQuit.Wait()
 		log.Println("Normal Shutdown")
 		os.Exit(0)
 	}()
