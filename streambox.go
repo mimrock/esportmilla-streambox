@@ -87,27 +87,65 @@ func LogAccess(msg string) {
 	Loggers.Access <- msg
 }
 
-func flushWriterWorker(writer *bufio.Writer, flushInterval int) {
+func flushWriterWorker(writer *bufio.Writer, flushInterval int, mutex *sync.Mutex) {
 	flushLog := time.Tick(time.Second * time.Duration(flushInterval))
 	for {
 		select {
 		case <-flushLog:
+			mutex.Lock()
 			writer.Flush()
+			mutex.Unlock()
 		}
 	}
 }
 
+func compressWorker(bufLogWriter *bufio.Writer, logWriter *os.File, logfile string, mutex *sync.Mutex) {
+	sizeCheck := time.Tick(time.Second * time.Duration(5))
+	for {
+		select {
+		case <-sizeCheck:
+			stats, err := logWriter.Stat()
+			if err != nil {
+				panic(err)
+			}
+			if stats.Size() > 640 {
+				mutex.Lock()
+				if err = logWriter.Close(); err != nil {
+					panic(err)
+				}
+				os.Rename(logfile, logfile+".bkp")
+				// @todo change the data, not the pointer, same for bufLogWriter
+				lw, err := os.OpenFile(logfile, os.O_RDWR|os.O_APPEND, 0660)
+				if err != nil {
+					panic(err)
+				}
+				*logWriter = *lw
+				bf := bufio.NewWriterSize(logWriter, 65535)
+				if err != nil {
+					panic(err)
+				}
+				*bufLogWriter = *bf
+				mutex.Unlock()
+			}
+		}
+	}
+
+}
+
 func logWorker(logFile string, flushInterval int, input chan string, safeQuit *sync.WaitGroup) {
+	logMutex := &sync.Mutex{}
 	logWriter, err := os.OpenFile(logFile, os.O_RDWR|os.O_APPEND, 0660)
 	if err != nil {
 		panic(err)
 	}
 
 	defer func() {
+		logMutex.Lock()
 		if err = logWriter.Close(); err != nil {
 			panic(err)
 		}
 		log.Println("Closed", logFile)
+		logMutex.Unlock()
 		safeQuit.Done()
 	}()
 
@@ -115,14 +153,18 @@ func logWorker(logFile string, flushInterval int, input chan string, safeQuit *s
 	logger := log.New(bufLogWriter, "", log.Ldate|log.Ltime)
 
 	if flushInterval > 0 {
-		go flushWriterWorker(bufLogWriter, flushInterval)
+		go flushWriterWorker(bufLogWriter, flushInterval, logMutex)
 	}
 
+	//go compressWorker(bufLogWriter, logWriter, logFile, logMutex)
+
 	for msg := range input {
+		logMutex.Lock()
 		logger.Println(msg)
 		if flushInterval == 0 {
 			bufLogWriter.Flush()
 		}
+		logMutex.Unlock()
 	}
 }
 
