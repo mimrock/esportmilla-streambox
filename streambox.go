@@ -100,7 +100,7 @@ func flushWriterWorker(writer *bufio.Writer, flushInterval int, mutex *sync.Mute
 }
 
 func compressWorker(bufLogWriter *bufio.Writer, logWriter *os.File, logfile string, mutex *sync.Mutex) {
-	sizeCheck := time.Tick(time.Second * time.Duration(5))
+	sizeCheck := time.Tick(time.Second * 5)
 	for {
 		select {
 		case <-sizeCheck:
@@ -108,14 +108,14 @@ func compressWorker(bufLogWriter *bufio.Writer, logWriter *os.File, logfile stri
 			if err != nil {
 				panic(err)
 			}
-			if stats.Size() > 640 {
+			log.Println("File size:", stats.Size())
+			if stats.Size() > 240 {
 				mutex.Lock()
 				if err = logWriter.Close(); err != nil {
 					panic(err)
 				}
 				os.Rename(logfile, logfile+".bkp")
-				// @todo change the data, not the pointer, same for bufLogWriter
-				lw, err := os.OpenFile(logfile, os.O_RDWR|os.O_APPEND, 0660)
+				lw, err := os.OpenFile(logfile, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0660)
 				if err != nil {
 					panic(err)
 				}
@@ -134,7 +134,7 @@ func compressWorker(bufLogWriter *bufio.Writer, logWriter *os.File, logfile stri
 
 func logWorker(logFile string, flushInterval int, input chan string, safeQuit *sync.WaitGroup) {
 	logMutex := &sync.Mutex{}
-	logWriter, err := os.OpenFile(logFile, os.O_RDWR|os.O_APPEND, 0660)
+	logWriter, err := os.OpenFile(logFile, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0660)
 	if err != nil {
 		panic(err)
 	}
@@ -156,7 +156,7 @@ func logWorker(logFile string, flushInterval int, input chan string, safeQuit *s
 		go flushWriterWorker(bufLogWriter, flushInterval, logMutex)
 	}
 
-	//go compressWorker(bufLogWriter, logWriter, logFile, logMutex)
+	go compressWorker(bufLogWriter, logWriter, logFile, logMutex)
 
 	for msg := range input {
 		logMutex.Lock()
