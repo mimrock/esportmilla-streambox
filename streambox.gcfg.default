@@ -13,6 +13,9 @@ ErrorLog = streambox-error.log
 EventLog = streambox-event.log
 AccessLog = streambox-access.log
 
+; Logfile will be archived soon if it's size exceeds this limit in bytes.
+LogSizeLimit = 67108864; 64M
+
 [DataSources]
 ; Full form for any SQL Data sources: username:password@protocol(address)/dbname?param=value
 

@@ -30,9 +30,10 @@ type Config struct {
 		TwitchRetry   int
 	}
 	Logging struct {
-		ErrorLog  string
-		EventLog  string
-		AccessLog string
+		ErrorLog     string
+		EventLog     string
+		AccessLog    string
+		LogSizeLimit int64
 	}
 	DataSources struct {
 		MainDatabase string
@@ -108,13 +109,25 @@ func compressWorker(bufLogWriter *bufio.Writer, logWriter *os.File, logfile stri
 			if err != nil {
 				panic(err)
 			}
-			log.Println("File size:", stats.Size())
-			if stats.Size() > 240 {
+			if stats.Size() > cfg.Logging.LogSizeLimit {
 				mutex.Lock()
 				if err = logWriter.Close(); err != nil {
 					panic(err)
 				}
-				os.Rename(logfile, logfile+".bkp")
+
+				var logArchive string
+				var err error
+				for i := 0; err == nil; i++ {
+					logArchive = logfile + "." + strconv.Itoa(i)
+					_, err = os.Stat(logArchive)
+
+				}
+				if os.IsNotExist(err) {
+					os.Rename(logfile, logArchive)
+				} else {
+					panic(err) // unknown error
+				}
+
 				lw, err := os.OpenFile(logfile, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0660)
 				if err != nil {
 					panic(err)
