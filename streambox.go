@@ -1,6 +1,7 @@
 package main
 
 import (
+	"./lomwoy"
 	"bufio"
 	"code.google.com/p/gcfg"
 	"database/sql"
@@ -40,6 +41,10 @@ type Config struct {
 	}
 }
 
+type Themer interface {
+	Render() []byte
+}
+
 var cfg = &Config{}
 
 type LogChans struct {
@@ -66,14 +71,12 @@ func newStreamboxHandler(streamList *StreamList) *streamboxHandler {
 func (sb *streamboxHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	accessMsg := fmt.Sprintf("%v %v from %v Headers: %+v", r.Method, r.RequestURI, r.RemoteAddr, r.Header)
 	LogAccess(accessMsg)
-	w.Write([]byte("<html><body><ol>"))
+
 	sb.StreamList.RLock()
-	for _, s := range sb.StreamList.Streams {
-		//fmt.Printf("%d - %s (%s) Status: %s Viewers: %d Url: %s Views: %d Name %s\n", i+1, s.Name, s.Game, s.Channel.Status, s.Viewers, s.Channel.Url, s.Channel.Views, s.Channel.Name)
-		w.Write([]byte("<li>Status: " + s.Channel.Status + " Game: " + s.Game + " (" + strconv.Itoa(s.Viewers) + ")</li>"))
-	}
+	theme := lomwoy.NewLomwoyTheme(sb.StreamList.Streams)
 	sb.StreamList.RUnlock()
-	w.Write([]byte("</ol></body></html>"))
+
+	w.Write(theme.Render())
 }
 
 func LogError(msg string) {
@@ -106,12 +109,14 @@ func compressWorker(bufLogWriter *bufio.Writer, logWriter *os.File, logfile stri
 		select {
 		case <-sizeCheck:
 			stats, err := logWriter.Stat()
+			mutex.Lock()
 			if err != nil {
+				mutex.Unlock()
 				panic(err)
 			}
 			if stats.Size() > cfg.Logging.LogSizeLimit {
-				mutex.Lock()
 				if err = logWriter.Close(); err != nil {
+					mutex.Unlock()
 					panic(err)
 				}
 
@@ -138,8 +143,8 @@ func compressWorker(bufLogWriter *bufio.Writer, logWriter *os.File, logfile stri
 					panic(err)
 				}
 				*bufLogWriter = *bf
-				mutex.Unlock()
 			}
+			mutex.Unlock()
 		}
 	}
 
