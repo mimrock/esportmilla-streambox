@@ -8,10 +8,12 @@ import (
 	"fmt"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/mrshankly/go-twitch/twitch"
+	//"html/template"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -63,6 +65,8 @@ type streamboxHandler struct {
 	StreamList *StreamList
 }
 
+type twitchStreams []twitch.StreamS
+
 func newStreamboxHandler(streamList *StreamList) *streamboxHandler {
 	log.Println("newStreamboxHandler")
 	return &streamboxHandler{StreamList: streamList}
@@ -73,10 +77,24 @@ func (sb *streamboxHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	LogAccess(accessMsg)
 
 	sb.StreamList.RLock()
-	theme := lomwoy.NewLomwoyTheme(sb.StreamList.Streams)
+	theme := lomwoy.NewLomwoyTheme(sb.StreamList.Streams, &w)
 	sb.StreamList.RUnlock()
 
-	w.Write(theme.Render())
+	theme.Render()
+
+	//w.Write(theme.Render())
+}
+
+func (st twitchStreams) Len() int {
+	return len(st)
+}
+
+func (st twitchStreams) Less(i, j int) bool {
+	return st[i].Viewers < st[j].Viewers
+}
+
+func (st twitchStreams) Swap(i, j int) {
+	st[i], st[j] = st[j], st[i]
 }
 
 func LogError(msg string) {
@@ -269,7 +287,9 @@ func Scheduler(streamList *StreamList) {
 	for {
 		select {
 		case <-refreshStreams:
-			st := getStreams(getActiveChannels(cfg.DataSources.MainDatabase))
+			var st twitchStreams
+			st = getStreams(getActiveChannels(cfg.DataSources.MainDatabase))
+			sort.Sort(st)
 			streamList.Lock()
 			streamList.Streams = st
 			streamList.Unlock()
