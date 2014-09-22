@@ -76,9 +76,13 @@ func (sb *streamboxHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	accessMsg := fmt.Sprintf("%v %v from %v Headers: %+v", r.Method, r.RequestURI, r.RemoteAddr, r.Header)
 	LogAccess(accessMsg)
 
+	r.ParseForm()
 	sb.StreamList.RLock()
-	theme := lomwoy.NewLomwoyTheme(sb.StreamList.Streams, &w)
+	// We need to copy the streamlist to let the theme to change it, and to avoid
+	// locking during the whole render process.
+	sl := sb.StreamList.Streams
 	sb.StreamList.RUnlock()
+	theme := lomwoy.NewLomwoyTheme(sl, &w, r.Form)
 
 	theme.Render()
 
@@ -289,7 +293,7 @@ func Scheduler(streamList *StreamList) {
 		case <-refreshStreams:
 			var st twitchStreams
 			st = getStreams(getActiveChannels(cfg.DataSources.MainDatabase))
-			sort.Sort(st)
+			sort.Sort(sort.Reverse(st))
 			streamList.Lock()
 			streamList.Streams = st
 			streamList.Unlock()
