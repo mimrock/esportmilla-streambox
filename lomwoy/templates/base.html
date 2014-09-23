@@ -37,7 +37,7 @@
 					display: inline-block;
 					width:25%
 				}
-				div.bottom {
+				div.game-block-bottom {
 					display: none;
 				}
 				a.button-hide {
@@ -60,34 +60,53 @@
 						</div>
 						<ul class="stream-list">
 						{{range $val}}
-							{{with .Channel}}
-								<li class="stream" title="{{.Status}}">
-									<a class="name" href="#">{{.Name}}</a>
-									<div class="viewers">{{.Views}}</div> 
-								</li>
-							{{end}}
+							<li class="stream" title="{{.Channel.Status}}">
+								<a class="name" href="#">{{.Channel.Name}}</a>
+								<div class="viewers">{{.Viewers}}</div>
+							</li>
 						{{end}}
 						</ul>
 					{{end}}
 				</div>
 			{{end}}
+			{{if .DisplayFeatured}} {{if .DisplaySecondary}}
 			<a href="#" class="button-show">Show more</a>
 			<a href="#" class="button-hide">Hide</a>
+			{{end}} {{end}}
+			{{if .DisplaySecondary}}
+				<div class="game-block-bottom">
+					{{range $index, $val := .SecondaryStreams}}
+						<div class="game-header">
+							{{$index}}
+						</div>
+						<ul class="stream-list">
+						{{range $val}}
+							<li class="stream" title="{{.Channel.Status}}">
+								<a class="name" href="#">{{.Channel.Name}}</a>
+								<div class="viewers">{{.Viewers}}</div>
+							</li>
+						{{end}}
+						</ul>
+					{{end}}
+				</div>
+			{{end}}
 		</div>
+		{{if .DisplayFeatured}} {{if .DisplaySecondary}}
 		<script type="text/javascript" src="https://code.jquery.com/jquery-2.1.1.min.js"></script>
 		<script type="text/javascript">
 		  console.log("helloo");
 		  $(".button-show").click(function(){
 			console.log("show");
-			$("div.bottom").show();
+			$("div.game-block-bottom").show();
 			$(this).hide();
 			$(".button-hide").show();
 		  });
 		  $(".button-hide").click(function(){
-			$("div.bottom").hide();
+			$("div.game-block-bottom").hide();
 			$(this).hide();
 			$(".button-show").show();
 		  });
 		</script>
+		{{end}} {{end}}
 	</body>
 </html>

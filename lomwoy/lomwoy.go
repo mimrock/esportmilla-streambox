@@ -9,8 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	//"strconv"
-	//"strings"
 )
 
 type lomwoyTheme struct {
@@ -24,6 +22,7 @@ type lomwoyData struct {
 	FeaturedStreams  map[string][]twitch.StreamS
 	SecondaryStreams map[string][]twitch.StreamS
 	DisplayFeatured  bool
+	DisplaySecondary bool
 }
 
 type ColorScheme struct {
@@ -40,10 +39,16 @@ func NewLomwoyTheme(streams []twitch.StreamS, w *http.ResponseWriter, values url
 	l.Data = new(lomwoyData)
 	l.setFeaturedStreams(values)
 	l.setSecondaryStreams(values, 5)
+	l.setColorScheme()
 	if len(l.Data.FeaturedStreams) > 0 {
 		l.Data.DisplayFeatured = true
 	} else {
 		l.Data.DisplayFeatured = false
+	}
+	if len(l.Data.SecondaryStreams) > 0 {
+		l.Data.DisplaySecondary = true
+	} else {
+		l.Data.DisplaySecondary = false
 	}
 	return l
 }
