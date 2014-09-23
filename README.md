@@ -29,6 +29,6 @@ Query params:
 Example:
 --------
 
-http://localhost:8080/streambox?f=wingsofdeath&g=Hearthstone:+Heroes+of+Warcraft|League+of+Legends
+`http://localhost:8080/streambox?f=wingsofdeath&g=Hearthstone:+Heroes+of+Warcraft|League+of+Legends`
 
 This query will show the stream of wingsofdeath it it's online, and the top five Hearthstone and LoL streams in the bottom box. If wingsofdeath's stream is not online, only the bottom box will be rendered, and it will be always visible.
