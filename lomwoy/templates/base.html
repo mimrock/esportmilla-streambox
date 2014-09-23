@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<style type="text/css">
+			{{with .ColorScheme}}
+				div#lomwoy-streams {
+					width:218px;
+					background: #{{.Background}};
+				}
+				div#lomwoy-streams div.header {
+					font-size: 1.5em;
+					background-color: #{{.Header}};
+					color: #{{.HeaderFont}};
+					color: white
+					width: 100%
+					text-align: center;
+				}
+				div.game-header {
+					font-weight: bold;
+					padding: 1em 0 0 0.5em;
+					color: #{{.Font}};
+				}
+				ul.stream-list {
+					list-style-type: none;
+					margin : 0;
+					padding: 0 0 0 1em;
+					color: #{{.Font}};
+				}
+				ul.stream-list li.stream a.name {
+					display: inline-block;
+					width:70%;
+					text-decoration: none;
+					line-height: 1.5em;
+					color: #{{.Font}};
+				}
+				ul.stream-list li.stream div.viewers {
+					display: inline-block;
+					width:25%
+				}
+				div.bottom {
+					display: none;
+				}
+				a.button-hide {
+					display: none;
+				}
+			{{end}}
+		</style>
+	</head>
+	<title>Lomwoy Theme Sample</title>
+	<body>
+		<div id="lomwoy-streams">
+			<div class="header">
+				Live Streams
+			</div>
+			{{if .DisplayFeatured}}
+				<div class="game-block-top">
+					{{range $index, $val := .FeaturedStreams}}
+						<div class="game-header">
+							{{$index}}
+						</div>
+						<ul class="stream-list">
+						{{range $val}}
+							{{with .Channel}}
+								<li class="stream" title="{{.Status}}">
+									<a class="name" href="#">{{.Name}}</a>
+									<div class="viewers">{{.Views}}</div> 
+								</li>
+							{{end}}
+						{{end}}
+						</ul>
+					{{end}}
+				</div>
+			{{end}}
+			<a href="#" class="button-show">Show more</a>
+			<a href="#" class="button-hide">Hide</a>
+		</div>
+		<script type="text/javascript" src="https://code.jquery.com/jquery-2.1.1.min.js"></script>
+		<script type="text/javascript">
+		  console.log("helloo");
+		  $(".button-show").click(function(){
+			console.log("show");
+			$("div.bottom").show();
+			$(this).hide();
+			$(".button-hide").show();
+		  });
+		  $(".button-hide").click(function(){
+			$("div.bottom").hide();
+			$(this).hide();
+			$(".button-show").show();
+		  });
+		</script>
+	</body>
+</html>
