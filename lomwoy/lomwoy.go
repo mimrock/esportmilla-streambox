@@ -5,7 +5,7 @@ import (
 	//"fmt"
 	"github.com/mrshankly/go-twitch/twitch"
 	"html/template"
-	"log"
+	//"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -108,8 +108,6 @@ func (theme *lomwoyTheme) setSecondaryStreams(queryParams url.Values, streamCoun
 			if stream.Game == game {
 				streamsAdded++
 				theme.Data.SecondaryStreams[game] = append(theme.Data.SecondaryStreams[game], stream)
-			} else {
-				log.Println(stream.Game, "!=", game)
 			}
 			if streamsAdded == streamCount {
 				break
