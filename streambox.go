@@ -1,12 +1,12 @@
 package main
 
 import (
-	"./lomwoy"
 	"bufio"
 	"code.google.com/p/gcfg"
 	"database/sql"
 	"fmt"
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/mimrock/esportmilla-streambox/lomwoy"
 	"github.com/mrshankly/go-twitch/twitch"
 	//"html/template"
 	"log"
@@ -285,14 +285,14 @@ func getStreams(activeChannelIds []string) []twitch.StreamS {
 	return activeStreams
 }
 
-func Scheduler(streamList *StreamList) {
+func Scheduler(streamList *StreamList, db *sql.DB) {
 	log.Println("refresh time is", cfg.Server.TwitchRefresh, "seconds")
 	refreshStreams := time.Tick(time.Second * time.Duration(cfg.Server.TwitchRefresh))
 	for {
 		select {
 		case <-refreshStreams:
 			var st twitchStreams
-			st = getStreams(getActiveChannels(cfg.DataSources.MainDatabase))
+			st = getStreams(getActiveChannels(db))
 			sort.Sort(sort.Reverse(st))
 			streamList.Lock()
 			streamList.Streams = st
@@ -301,11 +301,7 @@ func Scheduler(streamList *StreamList) {
 	}
 }
 
-func getActiveChannels(dataSourceName string) []string {
-	db, err := sql.Open("mysql", dataSourceName)
-	if err != nil {
-		panic(err)
-	}
+func getActiveChannels(db *sql.DB) []string {
 	rows, err := db.Query("SELECT channel_id FROM streambox_channels WHERE enabled = 1")
 	if err != nil {
 		log.Fatal(err)
@@ -326,7 +322,7 @@ func getActiveChannels(dataSourceName string) []string {
 	return enabledChannels
 }
 
-func Init(safeQuit *sync.WaitGroup) *StreamList {
+func Init(safeQuit *sync.WaitGroup) (*StreamList, *sql.DB) {
 	err := gcfg.ReadFileInto(cfg, "streambox.gcfg")
 	if err != nil {
 		log.Fatal(err)
@@ -338,17 +334,24 @@ func Init(safeQuit *sync.WaitGroup) *StreamList {
 
 	LogEvent("Starting up server.")
 
+	db, err := sql.Open("mysql", cfg.DataSources.MainDatabase)
+
+	if err != nil {
+		LogError("Cannot connect to database: " + err.Error())
+		panic(err)
+	}
+
 	streamList := new(StreamList)
-	streamList.Streams = getStreams(getActiveChannels(cfg.DataSources.MainDatabase))
-	return streamList
+	streamList.Streams = getStreams(getActiveChannels(db))
+	return streamList, db
 }
 
 func main() {
 	log.Println("Starting up server...")
 	var safeQuit sync.WaitGroup
-	streamList := Init(&safeQuit)
+	streamList, db := Init(&safeQuit)
 
-	go Scheduler(streamList)
+	go Scheduler(streamList, db)
 
 	go func() {
 		ch := make(chan os.Signal)
