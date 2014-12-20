@@ -52,27 +52,25 @@
 			<div class="header">
 				Live Streams
 			</div>
-			{{if .DisplayFeatured}}
-				<div class="game-block-top">
-					{{range $index, $val := .FeaturedStreams}}
-						<div class="game-header">
-							{{$index}}
-						</div>
-						<ul class="stream-list">
-						{{range $val}}
-							<li class="stream" title="{{.Channel.Status}}">
-								<a class="name" href="#">{{.Channel.Name}}</a>
-								<div class="viewers">{{.Viewers}}</div>
-							</li>
-						{{end}}
-						</ul>
+			<div class="game-block-top">
+				{{range $index, $val := .PrimaryStreams}}
+					<div class="game-header">
+						{{$index}}
+					</div>
+					<ul class="stream-list">
+					{{range $val}}
+						<li class="stream" title="{{.Channel.Status}}">
+							<a class="name" href="#">{{.Channel.Name}}</a>
+							<div class="viewers">{{.Viewers}}</div>
+						</li>
 					{{end}}
-				</div>
-			{{end}}
-			{{if .DisplayFeatured}} {{if .DisplaySecondary}}
+					</ul>
+				{{end}}
+			</div>
+			{{if .DisplaySecondary}}
 			<a href="#" class="button-show">Show more</a>
 			<a href="#" class="button-hide">Hide</a>
-			{{end}} {{end}}
+			{{end}}
 			{{if .DisplaySecondary}}
 				<div class="game-block-bottom">
 					{{range $index, $val := .SecondaryStreams}}
@@ -91,7 +89,7 @@
 				</div>
 			{{end}}
 		</div>
-		{{if .DisplayFeatured}} {{if .DisplaySecondary}}
+		{{if .DisplaySecondary}}
 		<script type="text/javascript" src="https://code.jquery.com/jquery-2.1.1.min.js"></script>
 		<script type="text/javascript">
 		  console.log("helloo");
@@ -107,6 +105,6 @@
 			$(".button-show").show();
 		  });
 		</script>
-		{{end}} {{end}}
+		{{end}}
 	</body>
 </html>

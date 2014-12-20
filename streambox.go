@@ -78,9 +78,11 @@ func (sb *streamboxHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	r.ParseForm()
 	sb.StreamList.RLock()
+	log.Println("streamlist length:", len(sb.StreamList.Streams))
 	// We need to copy the streamlist to let the theme to change it, and to avoid
 	// locking during the whole render process.
-	sl := sb.StreamList.Streams
+	sl := make([]twitch.StreamS, len(sb.StreamList.Streams))
+	copy(sl, sb.StreamList.Streams)
 	sb.StreamList.RUnlock()
 	theme := lomwoy.NewLomwoyTheme(sl, &w, r.Form)
 
