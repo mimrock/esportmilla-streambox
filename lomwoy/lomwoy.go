@@ -87,8 +87,12 @@ func (theme *lomwoyTheme) setFeaturedStreams(queryParams url.Values) {
 	}
 	featuredChannels := strings.Split(featuredChannelsString, "|")
 
-	for i, stream := range theme.Streams {
-		for j, channel := range featuredChannels {
+	//for i, stream := range theme.Streams {
+	for i := 0; i < len(theme.Streams); i++ {
+		stream := theme.Streams[i]
+		for j := 0; j < len(featuredChannels); j++ {
+			channel := featuredChannels[j]
+			//for j, channel := range featuredChannels {
 			if stream.Channel.Name == channel {
 				featuredChannels = append(featuredChannels[:j], featuredChannels[j+1:]...)
 				theme.Streams = append(theme.Streams[:i], theme.Streams[i+1:]...)
@@ -98,6 +102,8 @@ func (theme *lomwoyTheme) setFeaturedStreams(queryParams url.Values) {
 				} else {
 					theme.Data.PrimaryStreams[stream.Game] = []StreamDisplay{streamDisplay}
 				}
+				i--
+				j--
 				break
 			}
 		}
@@ -108,7 +114,6 @@ func (theme *lomwoyTheme) setFeaturedStreams(queryParams url.Values) {
 }
 
 func (theme *lomwoyTheme) addStreamsByGame(streams map[string][]StreamDisplay, queryParams url.Values, maxStreams int) {
-	// theme.Data.SecondaryStreams = make(map[string][]twitch.StreamS)
 	gameListString := queryParams.Get("g")
 	if len(gameListString) < 1 {
 		return
@@ -116,15 +121,12 @@ func (theme *lomwoyTheme) addStreamsByGame(streams map[string][]StreamDisplay, q
 	gameList := strings.Split(gameListString, "|")
 
 	for _, game := range gameList {
-		//log.Println("Game:", game)
 		for i := 0; i < len(theme.Streams); i++ {
-			//log.Println("i:", i, "stream Name:", theme.Streams[i].Channel.Name)
 			if len(streams[game]) >= maxStreams {
-				//log.Println("There is enough streams for this game. Break!", len(streams[game]))
+				//There is enough streams for this game.
 				break
 			}
 			if theme.Streams[i].Game == game {
-				//theme.Data.SecondaryStreams[game] = append(theme.Data.SecondaryStreams[game], stream)
 				if _, ok := streams[game]; !ok {
 					log.Println(game, "is missing")
 					streams[game] = []StreamDisplay{}
