@@ -60,7 +60,7 @@
 					<ul class="stream-list">
 					{{range $val}}
 						<li class="stream" title="{{.Channel.Status}}">
-							<a class="name" href="#">{{.Channel.Name}}</a>
+							<a class="name" target="_blank" href="{{.Channel.Url}}">{{.Channel.Name}}</a>
 							<div class="viewers">{{.Viewers}}</div>
 						</li>
 					{{end}}
