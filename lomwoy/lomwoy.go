@@ -3,6 +3,7 @@ package lomwoy
 
 import (
 	//"fmt"
+	"errors"
 	"github.com/mrshankly/go-twitch/twitch"
 	"html/template"
 	"log"
@@ -31,10 +32,22 @@ type lomwoyData struct {
 }
 
 type ColorScheme struct {
-	Background string
-	Header     string
-	HeaderFont string
-	Font       string
+	Background       string
+	HeaderBackground string
+	HeaderFont       string
+	FeaturedFont     string
+	Font             string
+}
+
+func NewColorScheme() *ColorScheme {
+	// Default colors.
+	cs := new(ColorScheme)
+	cs.Background = "d9dde0"
+	cs.HeaderBackground = "254673"
+	cs.HeaderFont = "ffffff"
+	cs.FeaturedFont = "13173e"
+	cs.Font = "13173e"
+	return cs
 }
 
 func NewLomwoyTheme(streams []twitch.StreamS, w *http.ResponseWriter, values url.Values) *lomwoyTheme {
@@ -55,7 +68,7 @@ func NewLomwoyTheme(streams []twitch.StreamS, w *http.ResponseWriter, values url
 	l.addStreamsByGame(l.Data.SecondaryStreams, values, 100)
 	// TODO Fill up primary box
 	//l.setSecondaryStreams(values, 5)
-	l.setColorScheme()
+	l.setColorScheme(values)
 	if len(l.Data.SecondaryStreams) > 0 {
 		l.Data.DisplaySecondary = true
 	} else {
@@ -71,12 +84,33 @@ func (theme *lomwoyTheme) Render() {
 	// Then the top X streams should be in the primary block.
 }
 
-func (theme *lomwoyTheme) setColorScheme() {
-	cs := new(ColorScheme)
-	cs.Background = "d9dde0"
-	cs.Header = "254673"
-	cs.HeaderFont = "ffffff"
-	cs.Font = "13173e"
+func (theme *lomwoyTheme) setColorScheme(queryParams url.Values) {
+	cs := NewColorScheme()
+	bkg := queryParams.Get("bkg")
+	if err := validateColor(bkg); err == nil {
+		cs.Background = bkg
+	}
+
+	header := queryParams.Get("headbkg")
+	if err := validateColor(header); err == nil {
+		cs.HeaderBackground = header
+	}
+
+	headerFont := queryParams.Get("headfont")
+	if err := validateColor(headerFont); err == nil {
+		cs.HeaderFont = headerFont
+	}
+
+	featuredFont := queryParams.Get("featfont")
+	if err := validateColor(featuredFont); err == nil {
+		cs.FeaturedFont = featuredFont
+	}
+
+	font := queryParams.Get("font")
+	if err := validateColor(font); err == nil {
+		cs.FeaturedFont = font
+	}
+
 	theme.Data.ColorScheme = *cs
 }
 
@@ -151,4 +185,16 @@ func deleteFromStreams(s *[]twitch.StreamS, place int) {
 		a = append(a[:place], a[place+1:]...)
 	}
 	*s = a
+}
+
+func validateColor(color string) error {
+	if len(color) != 3 && len(color) != 6 {
+		return errors.New("Invalid length. Color length must be 3 or 6 chars.")
+	}
+	for _, code := range color {
+		if !((code >= 48 && code <= 57) || (code >= 65 && code <= 70) || (code >= 97 && code <= 102)) {
+			return errors.New("Invalid char.")
+		}
+	}
+	return nil
 }
